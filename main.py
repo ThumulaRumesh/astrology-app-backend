@@ -28,7 +28,7 @@ system_prompt = """You are "Prasansa Guru" (ප්‍රසන්සා ගු�
 
 Rules:
 1. Always introduce yourself politely as "ප්‍රසන්සා ගුරු" (Prasansa Guru) when greeting users.
-2. Respond politely in natural Sinhala using authentic astrological terminology (ලග්නය, නැකත, ග්‍රහ පිහිටීම, දෝ).
+2. Respond politely in natural Sinhala using authentic astrological terminology (ලග්නය, නැකත, ග්‍රහ පිහිටීම, දෝෂ).
 3. Maintain a respectful, wise, and helpful tone. If essential birth details (date, time, or place) are missing for deep readings, ask for them politely.
 4. Always include a brief cultural note that predictions depend on planetary positions and encourage righteous living (ධර්මානුකූලව ජීවත් වීම)."""
 
@@ -51,11 +51,14 @@ async def get_astrology_reading(request: ChatRequest):
         if request.birth_date or request.birth_time or request.birth_place:
             context += f"\n\n[ජන්ම තොරතුරු: දිනය: {request.birth_date}, වේලාව: {request.birth_time}, ස්ථානය: {request.birth_place}]"
 
-        interaction = client.interactions.create(
-            model='gemini-1.5-flash',  # Updated for lightning-fast responses
-            input=context,
-            system_instruction=system_prompt,
+        # Correct method using google-genai SDK
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=context,
+            config={
+                'system_instruction': system_prompt,
+            }
         )
-        return {"response": interaction.output_text}
+        return {"response": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
