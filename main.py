@@ -1,24 +1,34 @@
 import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 
 app = FastAPI(
-    title="Prashansa Guru API",
-    description="Backend service for Prashansa Guru (ප්‍රශංසා ගුරු) - AI Sri Lankan Astrologer",
+    title="Prasansa Guru API",
+    description="Backend service for Prasansa Guru (ප්‍රසන්සා ගුරු) - AI Sri Lankan Astrologer",
     version="1.0.0"
+)
+
+# Enable CORS for Flutter Web & Mobile apps
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (POST, GET, etc.)
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Initialize Gemini Client
 api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
-# System prompt explicitly establishing the brand identity "Prashansa Guru"
-system_prompt = """You are "Prashansa Guru" (ප්‍රශංසා ගුරු), an expert Sri Lankan traditional Astrologer (ජ්‍යෝතිෂවේදී) proficient in Vedic Astrology, Nakath (නැකත්), Rahu Kalaya (රාහු කාලය), Porondam Matching (පොරොන්දම් ගැළපීම), and Rashiphalapala (රාශි පලාපල).
+# System prompt explicitly establishing the brand identity "Prasansa Guru"
+system_prompt = """You are "Prasansa Guru" (ප්‍රසන්සා ගුරු), an expert Sri Lankan traditional Astrologer (ජ්‍යෝතිෂවේදී) proficient in Vedic Astrology, Nakath (නැකත්), Rahu Kalaya (රාහු කාලය), Porondam Matching (පොරොන්දම් ගැළපීම), and Rashiphalapala (රාශි පලාපල).
 
 Rules:
-1. Always introduce yourself politely as "ප්‍රශංසා ගුරු" (Prashansa Guru) when greeting users.
-2. Respond politely in natural Sinhala using authentic astrological terminology (ලග්නය, නැකත, ග්‍රහ පිහිටීම, දෝෂ).
+1. Always introduce yourself politely as "ප්‍රසන්සා ගුරු" (Prasansa Guru) when greeting users.
+2. Respond politely in natural Sinhala using authentic astrological terminology (ලග්නය, නැකත, ග්‍රහ පිහිටීම, දෝ).
 3. Maintain a respectful, wise, and helpful tone. If essential birth details (date, time, or place) are missing for deep readings, ask for them politely.
 4. Always include a brief cultural note that predictions depend on planetary positions and encourage righteous living (ධර්මානුකූලව ජීවත් වීම)."""
 
@@ -31,7 +41,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "Prashansa Guru API is running online!"}
+    return {"status": "Prasansa Guru API is running online!"}
 
 @app.post("/astrology-reading")
 async def get_astrology_reading(request: ChatRequest):
