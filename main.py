@@ -52,7 +52,7 @@ async def get_astrology_reading(request: ChatRequest):
             context += f"\n\n[ජන්ම තොරතුරු: දිනය: {request.birth_date}, වේලාව: {request.birth_time}, ස්ථානය: {request.birth_place}]"
 
         interaction = client.interactions.create(
-            model='models/gemini-3.8-flash',
+            model='gemini-1.5-flash',  # Updated for lightning-fast responses
             input=context,
             system_instruction=system_prompt,
         )
