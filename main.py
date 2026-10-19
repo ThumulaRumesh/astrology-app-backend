@@ -1,64 +1,135 @@
 import os
+import logging
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google import genai
+from google.genai import types
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("prasansa-guru")
+
+APP_TITLE = "Prasansa Guru API"
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+API_KEY = os.getenv("GEMINI_API_KEY")
 
 app = FastAPI(
-    title="Prasansa Guru API",
-    description="Backend service for Prasansa Guru (ප්‍රසන්සා ගුරු) - AI Sri Lankan Astrologer",
-    version="1.0.0"
+    title=APP_TITLE,
+    description="Backend service for Prasansa Guru (ප්‍රසන්සා ගුරු)",
+    version="1.1.0",
 )
 
-# Enable CORS for Flutter Web & Mobile apps
+# The mobile app does not rely on browser CORS, but keeping CORS configured
+# makes local API testing and a possible web client easier.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods (POST, GET, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
-# Initialize Gemini Client
-api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+SYSTEM_PROMPT = """
+You are "Prasansa Guru" (ප්‍රසන්සා ගුරු), an AI assistant that responds in the
+style of a Sri Lankan traditional astrologer. You are familiar with Vedic
+astrology, Nakath (නැකත්), Rahu Kalaya (රාහු කාලය), Porondam Matching
+(පොරොන්දම් ගැළපීම), and Rashiphalapala (රාශි පලාපල).
 
-# System prompt explicitly establishing the brand identity "Prasansa Guru"
-system_prompt = """You are "Prasansa Guru" (ප්‍රසන්සා ගුරු), an expert Sri Lankan traditional Astrologer (ජ්‍යෝතිෂවේදී) proficient in Vedic Astrology, Nakath (නැකත්), Rahu Kalaya (රාහු කාලය), Porondam Matching (පොරොන්දම් ගැළපීම), and Rashiphalapala (රාශි පලාපල).
+Respond politely, primarily in natural Sinhala, and use relevant traditional
+astrological terms where appropriate. Answer the user's actual question.
+If birth date, birth time, or birth place is important but missing, ask for
+the missing details instead of pretending that you have them. Do not claim
+to have calculated a horoscope from details that were not supplied.
+When greeting a user, introduce yourself as "ප්‍රසන්සා ගුරු" (Prasansa Guru).
+Where appropriate, briefly note that traditional predictions are interpretive
+and encourage responsible, righteous living (ධර්මානුකූලව ජීවත් වීම).
+Do not add unrelated disclaimers to every answer.
+""".strip()
 
-Rules:
-1. Always introduce yourself politely as "ප්‍රසන්සා ගුරු" (Prasansa Guru) when greeting users.
-2. Respond politely in natural Sinhala using authentic astrological terminology (ලග්නය, නැකත, ග්‍රහ පිහිටීම, දෝෂ).
-3. Maintain a respectful, wise, and helpful tone. If essential birth details (date, time, or place) are missing for deep readings, ask for them politely.
-4. Always include a brief cultural note that predictions depend on planetary positions and encourage righteous living (ධර්මානුකූලව ජීවත් වීම)."""
 
-# Structure for incoming requests from the Mobile App
-class ChatRequest(BaseModel):
-    user_prompt: str
-    birth_date: str | None = None
-    birth_time: str | None = None
-    birth_place: str | None = None
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=12000)
+
+
+class AstrologyRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=12000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=30)
+    birth_date: str | None = Field(default=None, max_length=100)
+    birth_time: str | None = Field(default=None, max_length=100)
+    birth_place: str | None = Field(default=None, max_length=200)
+
 
 @app.get("/")
 def home():
     return {"status": "Prasansa Guru API is running online!"}
 
-@app.post("/astrology-reading")
-async def get_astrology_reading(request: ChatRequest):
-    try:
-        # Build prompt with optional birth details
-        context = request.user_prompt
-        if request.birth_date or request.birth_time or request.birth_place:
-            context += f"\n\n[ජන්ම තොරතුරු: දිනය: {request.birth_date}, වේලාව: {request.birth_time}, ස්ථානය: {request.birth_place}]"
 
-        # Correct method using google-genai SDK
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=context,
-            config={
-                'system_instruction': system_prompt,
-            }
+@app.get("/health")
+def health():
+    return {"status": "ok", "model": MODEL_NAME, "api_key_configured": bool(API_KEY)}
+
+
+@app.post("/astrology-reading")
+async def get_astrology_reading(request: AstrologyRequest):
+    if not API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="The server has not been configured with a Gemini API key.",
         )
-        return {"response": response.text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Please enter a question.")
+
+    birth_details = []
+    if request.birth_date:
+        birth_details.append(f"උපන් දිනය: {request.birth_date}")
+    if request.birth_time:
+        birth_details.append(f"උපන් වේලාව: {request.birth_time}")
+    if request.birth_place:
+        birth_details.append(f"උපන් ස්ථානය: {request.birth_place}")
+
+    # Build conversation context in order so follow-up questions make sense.
+    conversation_parts = []
+    if birth_details:
+        conversation_parts.append(
+            "User-provided birth details (use only as context): "
+            + "; ".join(birth_details)
+        )
+
+    for item in request.history[-30:]:
+        speaker = "User" if item.role == "user" else "Prasansa Guru"
+        conversation_parts.append(f"{speaker}: {item.content}")
+
+    conversation_parts.append(f"User: {message}")
+    contents = "\n\n".join(conversation_parts)
+
+    try:
+        client = genai.Client(api_key=API_KEY)
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.7,
+            ),
+        )
+        answer = response.text
+        if not answer:
+            raise HTTPException(
+                status_code=502,
+                detail="The AI service returned an empty response. Please try again.",
+            )
+        # Return the model text directly; do not rewrite or summarize it.
+        return {"response": answer}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Gemini request failed")
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service could not answer this request. Please try again later.",
+        )
