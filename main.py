@@ -116,7 +116,18 @@ async def get_astrology_reading(request: AstrologyRequest):
     contents = "\n\n".join(conversation_parts)
 
     try:
-        client = genai.Client(api_key=API_KEY)
+        client = genai.Client(
+            api_key=API_KEY,
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(
+                    attempts=3,
+                    initial_delay=1.0,
+                    max_delay=8.0,
+                    exp_base=2.0,
+                    http_status_codes=[429, 500, 502, 503, 504],
+                ),
+            ),
+        )
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=contents,
