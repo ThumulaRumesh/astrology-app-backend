@@ -71,6 +71,14 @@ def home():
 def health():
     return {"status": "ok", "model": MODEL_NAME, "api_key_configured": bool(API_KEY)}
 
+@app.get("/diagnostics")
+def diagnostics():
+    from importlib.metadata import version
+
+    return {
+        "google_genai_version": version("google-genai"),
+        "model": MODEL_NAME,
+    }
 
 @app.post("/astrology-reading")
 async def get_astrology_reading(request: AstrologyRequest):
