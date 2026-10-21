@@ -2,17 +2,18 @@ import os
 import logging
 from typing import Literal
 
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("prasansa-guru")
 
 APP_TITLE = "Prasansa Guru API"
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 app = FastAPI(
@@ -114,20 +115,10 @@ async def get_astrology_reading(request: AstrologyRequest):
 
     conversation_parts.append(f"User: {message}")
     contents = "\n\n".join(conversation_parts)
-
+    
     try:
-        client = genai.Client(
-            api_key=API_KEY,
-            http_options=types.HttpOptions(
-                retry_options=types.HttpRetryOptions(
-                    attempts=3,
-                    initial_delay=1.0,
-                    max_delay=8.0,
-                    exp_base=2.0,
-                    http_status_codes=[429, 500, 502, 503, 504],
-                ),
-            ),
-        )
+        client = genai.Client(api_key=API_KEY)
+
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=contents,
@@ -136,18 +127,51 @@ async def get_astrology_reading(request: AstrologyRequest):
                 temperature=0.7,
             ),
         )
+
         answer = response.text
+
         if not answer:
             raise HTTPException(
                 status_code=502,
                 detail="The AI service returned an empty response. Please try again.",
             )
-        # Return the model text directly; do not rewrite or summarize it.
+
         return {"response": answer}
+
     except HTTPException:
         raise
+
+    except errors.APIError as exc:
+        status_code = getattr(exc, "code", None)
+
+        if status_code == 429:
+            logger.warning("Gemini quota or rate limit reached: %s", exc)
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "The AI service has reached its current usage limit. "
+                    "Please try again later."
+                ),
+            ) from exc
+
+        if status_code == 503:
+            logger.warning("Gemini service temporarily unavailable: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "The AI service is temporarily busy. "
+                    "Please try again shortly."
+                ),
+            ) from exc
+
+        logger.exception("Gemini API request failed")
+        raise HTTPException(
+            status_code=502,
+            detail="The AI service encountered an error. Please try again later.",
+        ) from exc
+
     except Exception:
-        logger.exception("Gemini request failed")
+        logger.exception("Unexpected error while requesting Gemini")
         raise HTTPException(
             status_code=502,
             detail="The AI service could not answer this request. Please try again later.",
