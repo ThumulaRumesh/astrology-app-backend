@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("prasansa-guru")
 
 APP_TITLE = "Prasansa Guru API"
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 app = FastAPI(
