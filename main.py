@@ -2,7 +2,6 @@ import os
 import logging
 from typing import Literal
 
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -79,11 +78,9 @@ INTRODUCTION
   explicitly asks who you are.
 """.strip()
 
-
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=12000)
-
 
 class AstrologyRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
@@ -92,11 +89,9 @@ class AstrologyRequest(BaseModel):
     birth_time: str | None = Field(default=None, max_length=100)
     birth_place: str | None = Field(default=None, max_length=200)
 
-
 @app.get("/")
 def home():
     return {"status": "Prasansa Guru API is running online!"}
-
 
 @app.get("/health")
 def health():
